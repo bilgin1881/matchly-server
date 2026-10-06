@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: matchly-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: MATCHLY_PUBLIC_SERVER
+        value: "true"
+      - key: MATCHLY_FOOTBALL_KEY
+        sync: false
+      - key: MATCHLY_CLIENT_TOKEN
+        generateValue: true
