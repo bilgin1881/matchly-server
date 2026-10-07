@@ -128,6 +128,8 @@ class CachedDay {
   final DateTime at;
 }
 
+const liveStatuses = {'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE'};
+
 // Shared UTC-day cache and in-flight deduplication protect the free quota.
 class FixtureCache {
   FixtureCache(this.loader, {DateTime Function()? clock,
@@ -164,7 +166,26 @@ class FixtureCache {
     }
   }
 
-  Future<CachedDay> get(String day) {
+  int cacheMinutesFor(String day, {bool live = false}) {
+    if (!live) return 15;
+    final now = clock().toUtc();
+    final today = DateTime.utc(now.year, now.month, now.day);
+    if (day == today.toIso8601String().substring(0, 10)) return 5;
+    // A match can continue across UTC midnight. Do not repeatedly refresh
+    // older completed/empty dates simply because Live also loads yesterday.
+    if (day != today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10)) return 15;
+    for (final raw in _cache[day]?.rows ?? const []) {
+      final fixture = asMap(asMap(raw)['fixture']);
+      final status = asMap(fixture['status'])['short'];
+      if (liveStatuses.contains(status)) return 5;
+      final kickoff = DateTime.tryParse('${fixture['date']}')?.toUtc();
+      if (status == 'NS' && kickoff != null && !kickoff.isAfter(now) &&
+          now.difference(kickoff) <= const Duration(hours: 4)) return 5;
+    }
+    return 15;
+  }
+
+  Future<CachedDay> get(String day, {bool live = false}) {
     final coverage = providerCoverage;
     if (coverage != null && (day.compareTo(coverage['from'] as String) < 0 ||
         day.compareTo(coverage['to'] as String) > 0)) {
@@ -175,7 +196,8 @@ class FixtureCache {
       return Future<CachedDay>.error(error);
     }
     final cached = _cache[day];
-    if (cached != null && clock().difference(cached.at) < const Duration(minutes: 15)) {
+    if (cached != null && clock().difference(cached.at) <
+        Duration(minutes: cacheMinutesFor(day, live: live))) {
       return Future.value(cached);
     }
     final pending = _pending[day];
@@ -364,7 +386,7 @@ Future<void> handle(HttpRequest request, FixtureCache cache,
       await reply(request, 405, {'error': 'method_not_allowed'}); return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.6.0'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.6.2'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({'source': 'api-football',
           'lastProviderError': cache.lastProviderFailure, 'coverage': cache.providerCoverage});
@@ -377,19 +399,29 @@ Future<void> handle(HttpRequest request, FixtureCache cache,
     if (!config.authorized(request.headers.value('authorization'))) {
       await reply(request, 401, {'error': 'client_auth'}); return;
     }
+    final liveParam = request.uri.queryParameters['live'];
+    if (liveParam != null && liveParam != '1') throw const ApiFailure('invalid_mode', 400);
+    final live = liveParam == '1';
     final window = Window.parse(request.uri.queryParameters, DateTime.now());
     final rows = <dynamic>[];
     DateTime? oldest;
+    DateTime? liveTime;
+    DateTime? currentTime;
+    final today = cache.clock().toUtc().toIso8601String().substring(0, 10);
     for (final day in window.utcDays) {
-      final snapshot = await cache.get(day);
+      final snapshot = await cache.get(day, live: live);
       rows.addAll(snapshot.rows);
       if (oldest == null || snapshot.at.isBefore(oldest)) oldest = snapshot.at;
+      if (day == today) currentTime = snapshot.at;
+      if (normalize(snapshot.rows, window).any((row) => liveStatuses.contains(row['status'])) &&
+          (liveTime == null || snapshot.at.isBefore(liveTime))) liveTime = snapshot.at;
     }
     await reply(request, 200, {
       'fixtures': normalize(rows, window),
       'fetchedAt': oldest!.toUtc().toIso8601String(),
       'source': 'api-football',
-      'cacheMinutes': 15, 'coverage': cache.providerCoverage,
+      'cacheMinutes': live ? 5 : 15, 'coverage': cache.providerCoverage,
+      if (live) 'liveFetchedAt': (liveTime ?? currentTime ?? oldest).toUtc().toIso8601String(),
     });
   } on ApiFailure catch (error) {
     await reply(request, error.status, {'error': error.code, 'coverage': cache.providerCoverage});

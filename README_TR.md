@@ -1,4 +1,28 @@
-# MATCHLY bulut sunucusu — 0.6.0
+# MATCHLY bulut sunucusu — 0.6.2
+
+## Mevcut Render servisini 0.6.2'ye güncelleme
+
+Bu sürüm canlı ekranından gelen `/fixtures?...&live=1` isteklerine ayrı bir
+5 dakikalık yenileme sınırı ekler. Genel program ve özet yüklemeleri 15 dakikalık
+önbelleği korur. İki mod aynı UTC günü önbelleğini, eşzamanlı istek birleştirmesini
+ve 90 sorguluk günlük sınırı paylaşır. Canlı skorun toplam gecikmesi sağlayıcı
+veri gecikmesine de bağlıdır.
+
+1. GitHub `bilgin1881/matchly-server` deposunun köküne güncelleme klasöründeki
+   7 görünür dosyayı yükle. `server.dart`, `Dockerfile` ve yeni
+   `live_cache_test.dart` aynı kökte bulunmalı; klasör olarak iç içe yükleme.
+2. Render `matchly-api` servisinde **Manual Deploy → Deploy latest commit** seç.
+   Anahtarları veya erişim kodunu değiştirmene gerek yok.
+3. Servis Live olduktan sonra `https://matchly-api-7rsa.onrender.com/health`
+   yanıtında `serverVersion: 0.6.2` doğrula. Bu kontrol sağlayıcı kotası tüketmez.
+4. Flutter tarafını da 0.6.2'ye güncelle. Yalnızca sunucu güncellenirse eski
+   istemci canlı modunu istemediğinden normal 15 dakikalık veriyi almaya devam eder.
+
+Docker derlemesi mevcut `server_test.dart`, `cloud_test.dart` ve yeni
+`live_cache_test.dart` kontrollerini çalıştırıp sunucuyu derler. Canlı önbellek
+testleri gerçek API anahtarı kullanmaz ve sağlayıcı kotası tüketmez.
+
+## İlk kurulum
 
 Bu klasör Flutter uygulaması değildir. Yalnızca maç programını sağlayan sunucuyu
 Render üzerinde çalıştırır. Telefonda son yüklenen programdan oluşturulan
@@ -9,8 +33,9 @@ aynı kalır; sunucuyu taşımak tam haftalık program erişimi sağlamaz.
 
 1. https://github.com/new adresinde `matchly-server` adlı **Private** depo oluştur.
 2. README ekleme seçeneğini aç. Depoyu oluşturduktan sonra **Add file → Upload files** seç.
-3. Bu klasörün `server.dart`, `server_test.dart`, `cloud_test.dart`, `Dockerfile`,
-   `render.yaml` ve `README_TR.md` dosyalarını deponun köküne yükle.
+3. Bu klasörün `server.dart`, `server_test.dart`, `cloud_test.dart`,
+   `live_cache_test.dart`, `Dockerfile`, `render.yaml` ve `README_TR.md`
+   dosyalarını deponun köküne yükle.
 4. **Commit changes** ile kaydet. API anahtarını hiçbir dosyaya yazma.
 
 ZIP dosyasının kendisini GitHub'a yükleme. Render'ın göreceği depo kökünde
@@ -38,8 +63,8 @@ Environment'a `MATCHLY_PUBLIC_SERVER=true`, `MATCHLY_FOOTBALL_KEY` ve en az
 
 ## 3. Telefon uygulamasını bağlama
 
-Güncel Flutter paketindeki `lib/main.dart`, `lib/notification_service.dart` ve
-`pubspec.yaml` dosyalarını mevcut projene kopyala. `start-cloud.ps1` dosyasını
+Güncel Flutter paketindeki `lib` klasörünün bütün dosyalarını ve
+`pubspec.yaml` dosyasını mevcut projene kopyala. `start-cloud.ps1` dosyasını
 proje köküne koy. Android/Gradle dosyalarını değiştirmen gerekmiyor.
 
 Telefon USB ile bağlıyken, mevcut proje klasöründeki PowerShell terminalinde:
@@ -71,7 +96,8 @@ kalıcı kota yönetimi ayrıca kurulmalıdır. API-Football anahtarı uygulamad
 
 - Render Free, 15 dakika trafik gelmeyince uyur. Yeni istekte açılması yaklaşık
   bir dakika sürebilir. İlk yükleme bekler; hata alırsan biraz bekleyip Yenile'ye bas.
-- Maç verisi bellekte 15 dakika önbelleğe alınır. Sunucu uyuyunca/yeniden başlayınca
+- Normal maç programı 15 dakika, Canlı isteğindeki güncel UTC gününün verisi
+  5 dakika önbelleğe alınır. Sunucu uyuyunca/yeniden başlayınca
   önbellek, tarih kapsamı ve **90 istek/gün süreç sayacı sıfırlanır**. API hesabının
   gerçek kotası sıfırlanmaz. Bu deneme kurulumu tek kullanıcı ve tek sunucu içindir.
 - Sunucu internette olsa da uygulama kapalıyken her gün kendiliğinden yeni
@@ -87,5 +113,5 @@ Kaynaklar: https://render.com/docs/free,
 https://render.com/docs/docker, https://render.com/docs/web-services,
 https://render.com/docs/blueprint-spec.
 
-Sunucu kontrolleri: `dart analyze server.dart server_test.dart cloud_test.dart`,
-`dart run server_test.dart`, `dart run cloud_test.dart`.
+Sunucu kontrolleri: `dart analyze server.dart server_test.dart cloud_test.dart live_cache_test.dart`,
+`dart run server_test.dart`, `dart run cloud_test.dart`, `dart run live_cache_test.dart`.
