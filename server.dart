@@ -166,7 +166,7 @@ class FixtureCache {
     this.loader, {
     DateTime Function()? clock,
     this.interval = const Duration(seconds: 7),
-    this.dailyLimit = 90,
+    this.dailyLimit = 900,
   }) : clock = clock ?? DateTime.now;
   final Future<List<dynamic>> Function(String) loader;
   final DateTime Function() clock;
@@ -441,7 +441,7 @@ Json goalRow(Json row) {
 class FootballProvider {
   FootballProvider(
     this.key, {
-    this.dailyLimit = 90,
+    this.dailyLimit = 900,
     this.pageLoader,
     DateTime Function()? clock,
   }) : clock = clock ?? DateTime.now;
@@ -608,7 +608,7 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.0'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.1'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',
