@@ -1,117 +1,39 @@
-# MATCHLY bulut sunucusu — 0.6.2
+# MATCHLY – GOAL API / Süper Lig
 
-## Mevcut Render servisini 0.6.2'ye güncelleme
+Bu sürüm yalnızca Türkiye Süper Lig verisini GOAL API'den alır.
+API anahtarı APK'ya veya GitHub'a eklenmez.
 
-Bu sürüm canlı ekranından gelen `/fixtures?...&live=1` isteklerine ayrı bir
-5 dakikalık yenileme sınırı ekler. Genel program ve özet yüklemeleri 15 dakikalık
-önbelleği korur. İki mod aynı UTC günü önbelleğini, eşzamanlı istek birleştirmesini
-ve 90 sorguluk günlük sınırı paylaşır. Canlı skorun toplam gecikmesi sağlayıcı
-veri gecikmesine de bağlıdır.
+## GitHub / Render kurulumu
+1. ZIP'i açın. İçteki matchly-server-main klasöründeki dosyaları GitHub deposunun köküne yükleyin. Klasörü iç içe yüklemeyin.
+2. Render > matchly-api > Environment bölümünde MATCHLY_GOAL_KEY ekleyin. Değeri GOAL API anahtarınız olsun.
+3. MATCHLY_CLIENT_TOKEN değerini koruyun. Telefon uygulaması aynı token ile bağlanır.
+4. MATCHLY_PUBLIC_SERVER=true ve mevcut Render hostname/PORT ayarlarını koruyun.
+5. Save ve Manual Deploy > Deploy latest commit seçin.
+6. Loglarda testlerin geçtiğini ve MATCHLY bulut sunucusu hazir mesajını kontrol edin.
+7. /health anonim yanıtta serverVersion 0.7.0 göstermelidir. Yetkili istekte source goal-api görünür.
+8. Telefon uygulamasını kapatıp açın, maçları yenileyin. Favori takımları ve lig seçimini yeniden seçin: sağlayıcı kimlikleri değişti.
 
-1. GitHub `bilgin1881/matchly-server` deposunun köküne güncelleme klasöründeki
-   7 görünür dosyayı yükle. `server.dart`, `Dockerfile` ve yeni
-   `live_cache_test.dart` aynı kökte bulunmalı; klasör olarak iç içe yükleme.
-2. Render `matchly-api` servisinde **Manual Deploy → Deploy latest commit** seç.
-   Anahtarları veya erişim kodunu değiştirmene gerek yok.
-3. Servis Live olduktan sonra `https://matchly-api-7rsa.onrender.com/health`
-   yanıtında `serverVersion: 0.6.2` doğrula. Bu kontrol sağlayıcı kotası tüketmez.
-4. Flutter tarafını da 0.6.2'ye güncelle. Yalnızca sunucu güncellenirse eski
-   istemci canlı modunu istemediğinden normal 15 dakikalık veriyi almaya devam eder.
+Sunucu URL'si ve uygulama token'ı aynı kaldıysa APK'yı yeniden derlemek gerekmez.
+Eski MATCHLY_FOOTBALL_KEY bu sürümde kullanılmaz; GOAL anahtarını ayrı MATCHLY_GOAL_KEY alanına girin.
 
-Docker derlemesi mevcut `server_test.dart`, `cloud_test.dart` ve yeni
-`live_cache_test.dart` kontrollerini çalıştırıp sunucuyu derler. Canlı önbellek
-testleri gerçek API anahtarı kullanmaz ve sağlayıcı kotası tüketmez.
+## Yenileme ve kullanım
+Normal günlük veri 15 dakika, canlı ekran verisi 5 dakika önbellekte tutulur.
+Bu sürüm anlık WebSocket veya webhook gol bildirimi sağlamaz.
+UTC tarihinin tüm sayfaları kontrol edilir; yalnız Süper Lig seçilir.
+Her sayfa bir API isteğidir. Eksik sayfalama veya hata olduğunda kısmi gün başarı olarak döndürülmez.
+Güvenli başlangıç sınırı sunucu süreci başına UTC günde 90 gerçek API isteğidir.
+Bu, GOAL API plan limiti olarak doğrulanmış bir sayı değildir. Sık yenileme ve çok sayıda gün bu sınırı tüketebilir.
+Sayaç/önbellek bellektedir; Render yeniden başlarsa sıfırlanır. Sağlayıcının kendi limiti devam eder.
+Ücretsiz planın gerçek günlük kotasını panelden veya X-RateLimit-Limit/Remaining/Reset yanıt başlıklarından doğrulayın.
+Üretim yayını öncesinde günlük kotayı, maç kapsamını ve canlı veri gecikmesini ayrıca ölçün.
+Saatler kickoffUtc alanından UTC olarak alınır; telefon yerel saate çevirir.
+Bilinmeyen skorlar sıfıra çevrilmez. matchLive eski bayrağı yerine maç durumu/dönemi kullanılır.
 
-## İlk kurulum
-
-Bu klasör Flutter uygulaması değildir. Yalnızca maç programını sağlayan sunucuyu
-Render üzerinde çalıştırır. Telefonda son yüklenen programdan oluşturulan
-bildirimler çalışmaya devam eder. Veri sağlayıcısının tarih erişimi ve kotası
-aynı kalır; sunucuyu taşımak tam haftalık program erişimi sağlamaz.
-
-## 1. GitHub deposu
-
-1. https://github.com/new adresinde `matchly-server` adlı **Private** depo oluştur.
-2. README ekleme seçeneğini aç. Depoyu oluşturduktan sonra **Add file → Upload files** seç.
-3. Bu klasörün `server.dart`, `server_test.dart`, `cloud_test.dart`,
-   `live_cache_test.dart`, `Dockerfile`, `render.yaml` ve `README_TR.md`
-   dosyalarını deponun köküne yükle.
-4. **Commit changes** ile kaydet. API anahtarını hiçbir dosyaya yazma.
-
-ZIP dosyasının kendisini GitHub'a yükleme. Render'ın göreceği depo kökünde
-`Dockerfile` ve `server.dart` olmalı. Ek Flutter dosyaları gerekmez.
-
-## 2. Render'da oluşturma
-
-1. https://dashboard.render.com adresinde GitHub hesabınla giriş yap.
-2. **New → Blueprint** seç ve yalnızca `matchly-server` deposuna erişim ver.
-3. `render.yaml` dosyasındaki ayarları kullan: Docker, Frankfurt, Free, `/health`.
-4. Sorulan **MATCHLY_FOOTBALL_KEY** alanına mevcut API-Football anahtarını gir.
-   Anahtar Render'ın sunucu ortam ayarıdır. Sohbete veya Flutter'a ekleme.
-5. Oluşturmayı başlat. Erişim için **MATCHLY_CLIENT_TOKEN** otomatik oluşturulur.
-   Değeri Render'ın **Environment** bölümünden alıp bilgisayarında kullanacaksın.
-6. Docker önce sunucu ve erişim testlerini çalıştırır, sonra programı derler.
-   Başarılı olduğunda **Live** durumunu ve `https://....onrender.com` adresini kontrol et.
-7. Adresin sonuna `/health` ekle. `status: ok` sunucunun çalıştığını gösterir;
-   API hesabına erişimin doğrulandığı anlamına gelmez.
-
-Blueprint yerine **New → Web Service** kullanırsan: aynı depoyu seç; Language
-Docker, Free, Frankfurt, Dockerfile `./Dockerfile`, health `/health`.
-Environment'a `MATCHLY_PUBLIC_SERVER=true`, `MATCHLY_FOOTBALL_KEY` ve en az
-32 karakterlik rastgele `MATCHLY_CLIENT_TOKEN` ekle. Render'ın otomatik
-`RENDER_EXTERNAL_HOSTNAME` ve `PORT` değerlerini değiştirme.
-
-## 3. Telefon uygulamasını bağlama
-
-Güncel Flutter paketindeki `lib` klasörünün bütün dosyalarını ve
-`pubspec.yaml` dosyasını mevcut projene kopyala. `start-cloud.ps1` dosyasını
-proje köküne koy. Android/Gradle dosyalarını değiştirmen gerekmiyor.
-
-Telefon USB ile bağlıyken, mevcut proje klasöründeki PowerShell terminalinde:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\start-cloud.ps1
-```
-
-Script önce Render HTTPS adresini, sonra **MATCHLY_CLIENT_TOKEN** değerini
-gizli girişle sorar. Bu ikinci değer API-Football anahtarı değildir. Script
-geçici bir derleme ayar dosyası oluşturur, Flutter'ı başlatır, bittiğinde siler.
-Token komut metnine veya kaynak koduna yazılmaz. Her yeniden derlemede bu
-scripti kullan; düz `flutter run` varsayılan yerel sunucuya döner.
-
-Bu token deneme sunucusuna erişimi sınırlar. Mobil uygulamadaki değer
-çıkarılabilir; herkese açık mağaza sürümünde kullanıcı kimlik doğrulaması ve
-kalıcı kota yönetimi ayrıca kurulmalıdır. API-Football anahtarı uygulamada yoktur.
-
-## 4. Bilgisayardan bağımsız bağlantı testi
-
-1. Uygulama telefonda açılınca Flutter terminalinde `q` ile çık.
-2. Bilgisayardaki eski `dart run server.dart` terminalini Ctrl+C ile durdur.
-3. USB kablosunu çıkar. Telefonun Wi-Fi veya mobil interneti açık olsun.
-4. Telefonda uygulamayı tekrar aç; maçları yenile ve Bugün/Yarın programını kontrol et.
-5. Ayarlar'da **Özet programını yükle / yenile** ile yeni hatırlatma planını yükle.
-   Tam aralık ve takip edilen maç varsa özet oluşur; erişilemeyen hafta için uyarı gösterilir.
-
-## Sınırlar ve hata kontrolü
-
-- Render Free, 15 dakika trafik gelmeyince uyur. Yeni istekte açılması yaklaşık
-  bir dakika sürebilir. İlk yükleme bekler; hata alırsan biraz bekleyip Yenile'ye bas.
-- Normal maç programı 15 dakika, Canlı isteğindeki güncel UTC gününün verisi
-  5 dakika önbelleğe alınır. Sunucu uyuyunca/yeniden başlayınca
-  önbellek, tarih kapsamı ve **90 istek/gün süreç sayacı sıfırlanır**. API hesabının
-  gerçek kotası sıfırlanmaz. Bu deneme kurulumu tek kullanıcı ve tek sunucu içindir.
-- Sunucu internette olsa da uygulama kapalıyken her gün kendiliğinden yeni
-  program indirmez. Özetleri yeni günler için uygulamadan yenilemek gerekir.
-- `client_auth`: uygulamanın MATCHLY_CLIENT_TOKEN değeri Render ile aynı değil.
-- `provider_auth`: Render'daki MATCHLY_FOOTBALL_KEY doğrulanamadı.
-- `provider_plan`: sağlayıcı o tarihe veya sezona erişim vermiyor.
-- `server_unavailable`: sunucu uyanıyor veya henüz hizmet veremiyor.
-- Ücretli plan seçmeden bu kurulum Free ile denenebilir. Free kaynak kullanım
-  sınırlarına tabidir ve mağazaya çıkacak bir üretim hizmeti olarak tasarlanmamıştır.
-
-Kaynaklar: https://render.com/docs/free,
-https://render.com/docs/docker, https://render.com/docs/web-services,
-https://render.com/docs/blueprint-spec.
-
-Sunucu kontrolleri: `dart analyze server.dart server_test.dart cloud_test.dart live_cache_test.dart`,
-`dart run server_test.dart`, `dart run cloud_test.dart`, `dart run live_cache_test.dart`.
+## Yerel doğrulama
+Dart SDK ile:
+    dart analyze
+    dart run server_test.dart
+    dart run cloud_test.dart
+    dart run live_cache_test.dart
+    dart run goal_provider_test.dart
+Docker derlemesi bu dört test dosyasını da çalıştırır.
