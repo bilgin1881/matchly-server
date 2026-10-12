@@ -373,6 +373,27 @@ ApiFailure classifyProviderError(dynamic errors, {String? secret}) {
 
 const superLigId = 'cmr77dw0q00eprx06rqew3m48';
 
+// Pair domestic league names with countries to exclude identically named
+// competitions elsewhere. Preserve provider IDs for follows and deduplication.
+bool supportedLeague(Json row) {
+  if (row['leagueId'] == superLigId) return true;
+  final league = asMap(row['league']);
+  final name = '${row['leagueName'] ?? league['name'] ?? ''}'
+      .trim()
+      .toLowerCase();
+  final country = '${row['countryName'] ?? ''}'.trim().toLowerCase();
+  const domestic = <String, Set<String>>{
+    'turkey': {'süper lig', 'super lig', '1. lig', 'tff 1. lig'},
+    'england': {'premier league'},
+    'spain': {'la liga', 'laliga'},
+    'germany': {'bundesliga'},
+    'italy': {'serie a'},
+    'france': {'ligue 1'},
+  };
+  if (domestic[country]?.contains(name) ?? false) return true;
+  return {'uefa champions league', 'uefa europa league'}.contains(name);
+}
+
 // Convert provider rows into the existing client contract. Unknown scores stay
 // null; matchLive is deliberately ignored because it can remain set after FT.
 Json goalRow(Json row) {
@@ -420,7 +441,12 @@ Json goalRow(Json row) {
       'date': row['kickoffUtc'],
       'status': {'short': status, 'elapsed': number(row['matchElapsed'])},
     },
-    'league': {'id': superLigId, 'name': 'Süper Lig', 'country': 'Turkey'},
+    'league': {
+      'id': row['leagueId'] ?? asMap(row['league'])['id'],
+      'name':
+          row['leagueName'] ?? asMap(row['league'])['name'] ?? 'Competition',
+      'country': row['countryName'] ?? 'World',
+    },
     'teams': {
       'home': {
         'id': row['homeTeamId'] ?? home['id'],
@@ -521,7 +547,7 @@ class FootballProvider {
       final batch = data['data'] as List;
       for (final raw in batch) {
         final row = asMap(raw);
-        if (row['leagueId'] == superLigId) rows.add(goalRow(row));
+        if (supportedLeague(row)) rows.add(goalRow(row));
       }
       if (pagination['hasMore'] == false) return rows;
       final limit = pagination['limit'];
@@ -608,7 +634,7 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.1'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.2'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',

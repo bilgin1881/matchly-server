@@ -47,6 +47,63 @@ Future<void> main() async {
         'PST',
     'Terminal status precedence',
   );
+  final competitions = <List<String>>[
+    ['Turkey', 'Süper Lig'],
+    ['Turkey', '1. Lig'],
+    ['England', 'Premier League'],
+    ['Spain', 'La Liga'],
+    ['Germany', 'Bundesliga'],
+    ['Italy', 'Serie A'],
+    ['France', 'Ligue 1'],
+    ['eurocups', 'UEFA Champions League'],
+    ['eurocups', 'UEFA Europa League'],
+  ];
+  final supportedRows = <Json>[];
+  for (var i = 0; i < competitions.length; i++) {
+    final competition = competitions[i];
+    final sample = row('multi-$i')
+      ..['leagueId'] = 'league-$i'
+      ..['countryName'] = competition[0]
+      ..['leagueName'] = competition[1];
+    check(
+      supportedLeague(sample),
+      'Missing supported competition: $competition',
+    );
+    final normalized = normalize([goalRow(sample)], window).single;
+    final league = asMap(normalized['league']);
+    check(
+      league['id'] == 'league-$i' &&
+          league['name'] == competition[1] &&
+          league['country'] == competition[0],
+      'League metadata must be preserved',
+    );
+    supportedRows.add(sample);
+  }
+  final wrongCountry = row('wrong')
+    ..['leagueId'] = 'other'
+    ..['leagueName'] = 'Premier League'
+    ..['countryName'] = 'Wales';
+  check(
+    !supportedLeague(wrongCountry),
+    'Wrong-country Premier League included',
+  );
+  final secondTier = row('second')
+    ..['leagueId'] = 'other'
+    ..['leagueName'] = '2. Bundesliga'
+    ..['countryName'] = 'Germany';
+  check(!supportedLeague(secondTier), 'Unrequested second tier included');
+  final combined = FootballProvider(
+    'test',
+    pageLoader: (day, offset) async => {
+      'success': true,
+      'data': [...supportedRows, wrongCountry, secondTier],
+      'pagination': {'offset': offset, 'limit': 100, 'hasMore': false},
+    },
+  );
+  check(
+    (await combined.fetch('2026-10-09')).length == 9,
+    'Multi-league day should contain exactly nine supported fixtures',
+  );
   final offsets = <int>[];
   final provider = FootballProvider(
     'test',
