@@ -10,7 +10,7 @@ API anahtarı APK'ya veya GitHub'a eklenmez.
 4. MATCHLY_PUBLIC_SERVER=true ve mevcut Render hostname/PORT ayarlarını koruyun.
 5. Save ve Manual Deploy > Deploy latest commit seçin.
 6. Loglarda testlerin geçtiğini ve MATCHLY bulut sunucusu hazir mesajını kontrol edin.
-7. /health anonim yanıtta serverVersion 0.7.2 göstermelidir. Yetkili istekte source goal-api görünür.
+7. /health anonim yanıtta serverVersion 0.7.3 göstermelidir. Yetkili istekte source goal-api görünür.
 8. Telefon uygulamasını kapatıp açın, maçları yenileyin. Favori takımları ve lig seçimini yeniden seçin: sağlayıcı kimlikleri değişti.
 
 Sunucu URL'si ve uygulama token'ı aynı kaldıysa APK'yı yeniden derlemek gerekmez.
@@ -40,3 +40,5 @@ Docker derlemesi bu dört test dosyasını da çalıştırır.
 
 Ligler ve takımlar uygulamada yüklenen 7 günlük maç programından oluşur. O dönemde maçı olmayan lig listede görünmeyebilir. Eski Süper Lig favorileri korunur; yeni ligleri Takipler bölümünden seçin.
 Güncel tarihli tüm ligler anahtar olmadan bu ortamda canlı doğrulanmadı; dağıtım sonrası telefon üzerinden kontrol edin.
+
+0.7.3: Takım logoları home/away.logo alanında uygulamaya aktarılır. Logoları göstermek için güncel uygulama APK’sını da kurun.

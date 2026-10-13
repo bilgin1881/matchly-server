@@ -21,6 +21,14 @@ Json row(String id, {String status = 'FINISHED', String period = 'FINISHED'}) =>
     };
 Future<void> main() async {
   final window = Window(DateTime.utc(2026, 10, 9), DateTime.utc(2026, 10, 10));
+  final logoRow = row('logo')
+    ..['teamHomeBadge'] =
+        'https://media.goal-api.com/badges/192_galatasaray.jpg';
+  final logoFixture = normalize([goalRow(logoRow)], window).single;
+  check(
+    asMap(logoFixture['home'])['logo'] == logoRow['teamHomeBadge'],
+    'Provider logo must reach client',
+  );
   final fixture = normalize([goalRow(row('match'))], window).single;
   check(fixture['status'] == 'FT', 'Legacy live flag must not override FT');
   check(asMap(fixture['goals'])['home'] == 3, 'String score conversion');

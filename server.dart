@@ -132,8 +132,16 @@ List<Json> normalize(List<dynamic> rows, Window window) {
       'kickoff': kickoff.toIso8601String(),
       'status': '${status['short'] ?? 'UNKNOWN'}',
       'elapsed': status['elapsed'] is num ? status['elapsed'] : null,
-      'home': {'id': '${home['id']}', 'name': '${home['name'] ?? 'Home'}'},
-      'away': {'id': '${away['id']}', 'name': '${away['name'] ?? 'Away'}'},
+      'home': {
+        'id': '${home['id']}',
+        'name': '${home['name'] ?? 'Home'}',
+        'logo': home['logo'],
+      },
+      'away': {
+        'id': '${away['id']}',
+        'name': '${away['name'] ?? 'Away'}',
+        'logo': away['logo'],
+      },
       'league': {
         'id': '${league['id']}',
         'name': '${league['name'] ?? 'Competition'}',
@@ -451,10 +459,12 @@ Json goalRow(Json row) {
       'home': {
         'id': row['homeTeamId'] ?? home['id'],
         'name': home['name'] ?? row['homeTeamName'],
+        'logo': row['teamHomeBadge'] ?? home['badge'],
       },
       'away': {
         'id': row['awayTeamId'] ?? away['id'],
         'name': away['name'] ?? row['awayTeamName'],
+        'logo': row['teamAwayBadge'] ?? away['badge'],
       },
     },
     'goals': {
@@ -634,7 +644,7 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.2'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.3'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',
