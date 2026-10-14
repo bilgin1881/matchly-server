@@ -1,3 +1,9 @@
+# Sunucu 0.8.1 — Avrupa kupaları düzeltmesi
+Lig aşaması ekleri tanınır, kupa adı uygulama filtresi için sadeleştirilir.
+Konferans Ligi eklendi. Takım, maç ve lig kimlikleri korunur.
+Dosyaları mevcut GitHub sunucu deposuna yükleyin. Render Live sonrası /health serverVersion 0.8.1 olmalı.
+API anahtarlarını değiştirmeyin.
+
 # MATCHLY sunucu 0.8.0 — Basketbol servisi
 
 Bu sürüm mevcut futbol servisini korur ve ayrı `/basketball/fixtures` servisi ekler.

@@ -398,6 +398,28 @@ ApiFailure classifyProviderError(dynamic errors, {String? secret}) {
 
 const superLigId = 'cmr77dw0q00eprx06rqew3m48';
 
+// Only strip known phase suffixes from the three supported UEFA cups.
+// Keep provider IDs unchanged so saved follows and reminders still match.
+String? europeanCupName(String raw) {
+  final parts = raw.trim().toLowerCase().split(RegExp(r'\s+[-–—]\s+'));
+  const names = {
+    'uefa champions league': 'UEFA Champions League',
+    'uefa europa league': 'UEFA Europa League',
+    'uefa conference league': 'UEFA Conference League',
+    'uefa europa conference league': 'UEFA Conference League',
+  };
+  final name = names[parts.first];
+  if (name == null) return null;
+  if (parts.length == 1) return name;
+  if (parts.length != 2) return null;
+  final stage = parts[1].trim();
+  if (RegExp(
+    r'^(league phase|group stage|group phase|qualification|qualifying|qualifiers|play-offs|playoffs|knockout phase play-offs|round of (16|32)|1/(8|16)-finals|quarter-finals|semi-finals|final|finals|[1-4](st|nd|rd|th) qualifying round)$',
+  ).hasMatch(stage))
+    return name;
+  return null;
+}
+
 // Pair domestic league names with countries to exclude identically named
 // competitions elsewhere. Preserve provider IDs for follows and deduplication.
 bool supportedLeague(Json row) {
@@ -416,7 +438,7 @@ bool supportedLeague(Json row) {
     'france': {'ligue 1'},
   };
   if (domestic[country]?.contains(name) ?? false) return true;
-  return {'uefa champions league', 'uefa europa league'}.contains(name);
+  return europeanCupName(name) != null;
 }
 
 // Convert provider rows into the existing client contract. Unknown scores stay
@@ -469,7 +491,12 @@ Json goalRow(Json row) {
     'league': {
       'id': row['leagueId'] ?? asMap(row['league'])['id'],
       'name':
-          row['leagueName'] ?? asMap(row['league'])['name'] ?? 'Competition',
+          europeanCupName(
+            '${row['leagueName'] ?? asMap(row['league'])['name'] ?? ''}',
+          ) ??
+          row['leagueName'] ??
+          asMap(row['league'])['name'] ??
+          'Competition',
       'country': row['countryName'] ?? 'World',
     },
     'teams': {
@@ -838,7 +865,7 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.8.0'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.8.1'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',

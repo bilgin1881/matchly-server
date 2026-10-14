@@ -20,6 +20,43 @@ Json row(String id, {String status = 'FINISHED', String period = 'FINISHED'}) =>
       'awayTeamScore': '1',
     };
 Future<void> main() async {
+  for (final cup in [
+    'UEFA Champions League',
+    'UEFA Europa League',
+    'UEFA Conference League',
+    'UEFA Europa Conference League',
+  ]) {
+    for (final stage in [
+      '',
+      ' - League Phase',
+      ' - Quarter-finals',
+      ' - Qualification',
+    ]) {
+      final sample = row('europe')
+        ..['leagueId'] = 'stable-id'
+        ..['leagueName'] = '$cup$stage'
+        ..['countryName'] = 'Europe';
+      check(supportedLeague(sample), 'Cup excluded: $cup$stage');
+      final mapped = asMap(goalRow(sample)['league']);
+      check(mapped['id'] == 'stable-id', 'Cup ID changed');
+      check(
+        mapped['name'] ==
+            (cup.contains('Conference') ? 'UEFA Conference League' : cup),
+        'Cup name did not normalize',
+      );
+    }
+  }
+  for (final name in [
+    'AFC Champions League - League Phase',
+    'UEFA Youth League - League Phase',
+    'UEFA Champions League Women',
+    'UEFA Champions League - Women',
+  ]) {
+    final sample = row('excluded')
+      ..['leagueId'] = 'other'
+      ..['leagueName'] = name;
+    check(!supportedLeague(sample), 'Unrequested competition accepted: $name');
+  }
   final window = Window(DateTime.utc(2026, 10, 9), DateTime.utc(2026, 10, 10));
   final logoRow = row('logo')
     ..['teamHomeBadge'] =
