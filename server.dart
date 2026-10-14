@@ -532,7 +532,7 @@ class FootballProvider {
   String _quotaDay = '';
   int _calls = 0;
 
-  Future<Json> _page(String day, int offset) async {
+  Future<Json> _page(String day, int offset, {String? fixtureId}) async {
     final today = clock().toUtc().toIso8601String().substring(0, 10);
     if (_quotaDay != today) {
       _quotaDay = today;
@@ -548,10 +548,13 @@ class FootballProvider {
       () => client.close(force: true),
     );
     try {
-      final uri = Uri.https('api.goal-api.com', '/v1/fixtures/date/$day', {
-        'limit': '100',
-        'offset': '$offset',
-      });
+      final uri = Uri.https(
+        'api.goal-api.com',
+        fixtureId == null
+            ? '/v1/fixtures/date/$day'
+            : '/v1/fixtures/$fixtureId/events',
+        fixtureId == null ? {'limit': '100', 'offset': '$offset'} : null,
+      );
       final request = await client
           .getUrl(uri)
           .timeout(const Duration(seconds: 12));
@@ -583,6 +586,37 @@ class FootballProvider {
       deadline.cancel();
       client.close(force: true);
     }
+  }
+
+  Future<Json> events(String id) async {
+    final data = await _page('', 0, fixtureId: id);
+    if (data['success'] != true ||
+        data['data'] is! List ||
+        data['fixtureId'] != id) {
+      throw const ApiFailure('invalid_provider_data', 502);
+    }
+    final goals = <Json>[];
+    final seen = <String>{};
+    for (final item in data['data'] as List) {
+      final row = asMap(item);
+      if (row['type'] != 'GOAL') continue;
+      final eventId = '${row['id'] ?? ''}';
+      if (eventId.isNotEmpty && !seen.add(eventId)) continue;
+      goals.add({
+        for (final key in [
+          'id',
+          'time',
+          'homeScorer',
+          'awayScorer',
+          'homeAssist',
+          'awayAssist',
+          'score',
+          'info',
+        ])
+          key: row[key],
+      });
+    }
+    return {'fixtureId': id, 'goals': goals};
   }
 
   Future<List<dynamic>> fetch(String day) async {
@@ -818,11 +852,60 @@ Future<void> reply(HttpRequest request, int status, Json data) async {
   }
 }
 
+class GoalEventCache {
+  GoalEventCache(this.loader, {DateTime Function()? clock})
+    : clock = clock ?? DateTime.now;
+  final Future<Json> Function(String) loader;
+  final DateTime Function() clock;
+  final _saved = <String, Json>{};
+  final _pending = <String, Future<Json>>{};
+  DateTime? _retryAfter;
+  Future<Json> get(String id) {
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,80}$').hasMatch(id))
+      throw const ApiFailure('invalid_fixture', 400);
+    final saved = _saved[id];
+    if (saved != null &&
+        clock().difference(DateTime.parse(saved['fetchedAt'] as String)) <
+            const Duration(minutes: 5))
+      return Future.value(saved);
+    if (_pending.containsKey(id)) return _pending[id]!;
+    if (_retryAfter != null && clock().isBefore(_retryAfter!))
+      throw const ApiFailure('events_retry_later', 503);
+    if (_pending.length >= 8) throw const ApiFailure('events_busy', 503);
+    final future = _load(id);
+    _pending[id] = future;
+    return future;
+  }
+
+  Future<Json> _load(String id) async {
+    try {
+      final data = await loader(id);
+      final result = {
+        ...data,
+        'fetchedAt': clock().toUtc().toIso8601String(),
+        'cacheMinutes': 5,
+      };
+      _saved.remove(id);
+      _saved[id] = result;
+      while (_saved.length > 256) {
+        _saved.remove(_saved.keys.first);
+      }
+      return result;
+    } catch (_) {
+      _retryAfter = clock().add(const Duration(minutes: 1));
+      rethrow;
+    } finally {
+      _pending.remove(id);
+    }
+  }
+}
+
 Future<void> handle(
   HttpRequest request,
   FixtureCache cache, {
   ServerConfig config = const ServerConfig(),
   FixtureCache? basketballCache,
+  GoalEventCache? goalEvents,
 }) async {
   try {
     if (!config.acceptsHost(request.headers.value('host'))) {
@@ -865,7 +948,7 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.8.1'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.9.0'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',
@@ -875,6 +958,18 @@ Future<void> handle(
         });
       }
       await reply(request, 200, data);
+      return;
+    }
+    final eventRoute = RegExp(r'^/fixtures/([a-zA-Z0-9_-]{1,80})/events$')
+        .firstMatch(request.uri.path);
+    if (eventRoute != null) {
+      if (!config.authorized(request.headers.value('authorization'))) {
+        await reply(request, 401, {'error': 'client_auth'});
+        return;
+      }
+      if (goalEvents == null)
+        throw const ApiFailure('events_not_configured', 503);
+      await reply(request, 200, await goalEvents.get(eventRoute.group(1)!));
       return;
     }
     final basketball = request.uri.path == '/basketball/fixtures';
@@ -965,7 +1060,9 @@ Future<void> main() async {
     exitCode = 1;
     return;
   }
-  final cache = FixtureCache(FootballProvider(key).fetch);
+  final footballProvider = FootballProvider(key);
+  final cache = FixtureCache(footballProvider.fetch);
+  final goalEvents = GoalEventCache(footballProvider.events);
   final basketballKey =
       Platform.environment['MATCHLY_HIGHLIGHTLY_KEY']?.trim() ?? '';
   final basketballCache = basketballKey.isEmpty
@@ -994,7 +1091,13 @@ Future<void> main() async {
   }
   await for (final request in server) {
     unawaited(
-      handle(request, cache, config: config, basketballCache: basketballCache),
+      handle(
+        request,
+        cache,
+        config: config,
+        basketballCache: basketballCache,
+        goalEvents: goalEvents,
+      ),
     );
   }
 }

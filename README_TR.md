@@ -1,3 +1,9 @@
+# Sunucu 0.9.0 — Gol olayları
+Yeni /fixtures/:id/events servisi mevcut istemci tokenı ile korunur.
+GOAL anahtarı sunucuda kalır. Futbol fikstürü ile ortak günlük 900 istek sınırı kullanılır.
+Olaylar 5 dakika önbellekte tutulur. Docker altı test grubunu çalıştırır.
+API anahtarlarını değiştirmeyin. Render Live sonrası /health sürümü 0.9.0 olmalı.
+
 # Sunucu 0.8.1 — Avrupa kupaları düzeltmesi
 Lig aşaması ekleri tanınır, kupa adı uygulama filtresi için sadeleştirilir.
 Konferans Ligi eklendi. Takım, maç ve lig kimlikleri korunur.
