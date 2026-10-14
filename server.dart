@@ -129,6 +129,7 @@ List<Json> normalize(List<dynamic> rows, Window window) {
     final goals = asMap(row['goals']);
     fixtures['$id'] = {
       'id': '$id',
+      'sport': row['sport'] == 'basketball' ? 'basketball' : 'football',
       'kickoff': kickoff.toIso8601String(),
       'status': '${status['short'] ?? 'UNKNOWN'}',
       'elapsed': status['elapsed'] is num ? status['elapsed'] : null,
@@ -166,7 +167,20 @@ class CachedDay {
   final DateTime at;
 }
 
-const liveStatuses = {'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE'};
+const liveStatuses = {
+  '1H',
+  'HT',
+  '2H',
+  'ET',
+  'BT',
+  'P',
+  'LIVE',
+  'Q1',
+  'Q2',
+  'Q3',
+  'Q4',
+  'OT',
+};
 
 // Shared UTC-day cache and in-flight deduplication protect the free quota.
 class FixtureCache {
@@ -175,11 +189,13 @@ class FixtureCache {
     DateTime Function()? clock,
     this.interval = const Duration(seconds: 7),
     this.dailyLimit = 900,
+    this.fixedCacheMinutes,
   }) : clock = clock ?? DateTime.now;
   final Future<List<dynamic>> Function(String) loader;
   final DateTime Function() clock;
   final Duration interval;
   final int dailyLimit;
+  final int? fixedCacheMinutes;
   final Map<String, CachedDay> _cache = {};
   final Map<String, Future<CachedDay>> _pending = {};
   Future<void> _queue = Future<void>.value();
@@ -215,6 +231,7 @@ class FixtureCache {
   }
 
   int cacheMinutesFor(String day, {bool live = false}) {
+    if (fixedCacheMinutes != null) return fixedCacheMinutes!;
     if (!live) return 15;
     final now = clock().toUtc();
     final today = DateTime.utc(now.year, now.month, now.day);
@@ -570,6 +587,182 @@ class FootballProvider {
   }
 }
 
+// Highlightly identities are namespaced to avoid collisions with football.
+const basketballLeagues = <int, String>{
+  10996: 'NBA',
+  102904: 'EuroLeague',
+  89288: 'Basketbol Süper Ligi',
+};
+
+Json basketballRow(Json row) {
+  final league = asMap(row['league']);
+  final home = asMap(row['homeTeam']);
+  final away = asMap(row['awayTeam']);
+  if (row['id'] == null ||
+      home['id'] == null ||
+      away['id'] == null ||
+      DateTime.tryParse('${row['date']}') == null) {
+    throw const ApiFailure('invalid_provider_data', 502);
+  }
+  const statuses = <String, String>{
+    'Not started': 'NS',
+    'To be announced': 'TBD',
+    'First quarter': 'Q1',
+    'Second quarter': 'Q2',
+    'Third quarter': 'Q3',
+    'Fourth quarter': 'Q4',
+    'Over time': 'OT',
+    'Break time': 'BT',
+    'Half time': 'HT',
+    'Finished': 'FT',
+    'Finished after over time': 'AET',
+    'Postponed': 'PST',
+    'Cancelled': 'CANC',
+    'Suspended': 'SUSP',
+    'Awarded': 'AWD',
+    'Abandoned': 'ABD',
+  };
+  final state = asMap(row['state']);
+  final score = RegExp(r'^\s*(\d+)\s*-\s*(\d+)\s*$')
+      .firstMatch('${asMap(state['score'])['current'] ?? ''}');
+  Json team(Json value) => {
+    'id': 'hl-basket-${value['id']}',
+    'name': value['name'],
+    'logo': value['logo'],
+  };
+  return {
+    'sport': 'basketball',
+    'fixture': {
+      'id': 'hl-basket-${row['id']}',
+      'date': row['date'],
+      // Do not turn the provider's quarter clock into football elapsed minutes.
+      'status': {
+        'short': statuses[state['description']] ?? 'UNKNOWN',
+        'elapsed': null,
+      },
+    },
+    'league': {
+      'id': 'hl-basket-${league['id']}',
+      'name': basketballLeagues[league['id']],
+      'country': asMap(row['country'])['name'] ?? 'World',
+    },
+    'teams': {'home': team(home), 'away': team(away)},
+    'goals': {
+      'home': score == null ? null : int.parse(score[1]!),
+      'away': score == null ? null : int.parse(score[2]!),
+    },
+  };
+}
+
+class BasketballProvider {
+  BasketballProvider(
+    this.key, {
+    this.dailyLimit = 90,
+    this.pageLoader,
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now;
+  final String key;
+  final int dailyLimit;
+  final DateTime Function() clock;
+  final Future<Json> Function(String day, int offset)? pageLoader;
+  String _quotaDay = '';
+  int _calls = 0;
+  DateTime? _blockedUntil;
+
+  Future<Json> _page(String day, int offset) async {
+    final now = clock().toUtc();
+    final today = now.toIso8601String().substring(0, 10);
+    if (_quotaDay != today) {
+      _quotaDay = today;
+      _calls = 0;
+    }
+    if (_blockedUntil != null && now.isBefore(_blockedUntil!)) {
+      throw const ApiFailure('provider_limit', 429);
+    }
+    if (_calls >= dailyLimit) throw const ApiFailure('daily_limit', 429);
+    _calls++;
+    if (pageLoader != null) return pageLoader!(day, offset);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 12);
+    final deadline = Timer(
+      const Duration(seconds: 25),
+      () => client.close(force: true),
+    );
+    try {
+      final request = await client.getUrl(
+        Uri.https('basketball.highlightly.net', '/matches', {
+          'date': day,
+          'timezone': 'Etc/UTC',
+          'limit': '100',
+          'offset': '$offset',
+        }),
+      );
+      request.followRedirects = false;
+      request.headers.set('x-rapidapi-key', key);
+      final response = await request.close();
+      final remaining = int.tryParse(
+        response.headers.value('x-ratelimit-requests-remaining') ?? '',
+      );
+      if (response.statusCode == 429 || remaining == 0) {
+        // Conservative backoff avoids hammering the daily quota after restarts.
+        _blockedUntil = now.add(const Duration(hours: 24));
+      }
+      if (response.statusCode == 429)
+        throw const ApiFailure('provider_limit', 429);
+      if (response.statusCode == 401)
+        throw const ApiFailure('provider_auth', 502);
+      if (response.statusCode == 403)
+        throw const ApiFailure('provider_access', 502);
+      if (response.statusCode != 200)
+        throw const ApiFailure('provider_unavailable', 502);
+      return asMap(jsonDecode(await response.transform(utf8.decoder).join()));
+    } on ApiFailure {
+      rethrow;
+    } catch (_) {
+      throw const ApiFailure('provider_unavailable', 502);
+    } finally {
+      deadline.cancel();
+      client.close(force: true);
+    }
+  }
+
+  Future<List<dynamic>> fetch(String day) async {
+    final rows = <dynamic>[];
+    var offset = 0;
+    for (var page = 0; page < 100; page++) {
+      final data = await _page(day, offset);
+      final pagination = asMap(data['pagination']);
+      final total = pagination['totalCount'];
+      if (data['data'] is! List ||
+          total is! int ||
+          total < 0 ||
+          pagination['offset'] != offset) {
+        throw const ApiFailure('invalid_provider_data', 502);
+      }
+      final planMessage = '${asMap(data['plan'])['message'] ?? ''}'
+          .toLowerCase();
+      if (planMessage.contains('hidden') ||
+          planMessage.contains('restricted')) {
+        throw const ApiFailure('provider_plan', 502);
+      }
+      final batch = data['data'] as List;
+      for (final raw in batch) {
+        final row = asMap(raw);
+        if (basketballLeagues.containsKey(asMap(row['league'])['id'])) {
+          rows.add(basketballRow(row));
+        }
+      }
+      if (offset + batch.length >= total) return rows;
+      final limit = pagination['limit'];
+      if (limit is! int || limit <= 0 || limit > 100 || batch.length != limit) {
+        throw const ApiFailure('invalid_provider_data', 502);
+      }
+      offset += limit;
+    }
+    throw const ApiFailure('invalid_provider_data', 502);
+  }
+}
+
 String readKey() {
   final fromEnv = Platform.environment['MATCHLY_GOAL_KEY']?.trim() ?? '';
   if (fromEnv.isNotEmpty) return fromEnv;
@@ -602,6 +795,7 @@ Future<void> handle(
   HttpRequest request,
   FixtureCache cache, {
   ServerConfig config = const ServerConfig(),
+  FixtureCache? basketballCache,
 }) async {
   try {
     if (!config.acceptsHost(request.headers.value('host'))) {
@@ -644,10 +838,11 @@ Future<void> handle(
       return;
     }
     if (request.uri.path == '/health') {
-      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.7.3'};
+      final data = <String, dynamic>{'status': 'ok', 'serverVersion': '0.8.0'};
       if (config.authorized(request.headers.value('authorization'))) {
         data.addAll({
           'source': 'goal-api',
+          'basketballConfigured': basketballCache != null,
           'lastProviderError': cache.lastProviderFailure,
           'coverage': cache.providerCoverage,
         });
@@ -655,13 +850,20 @@ Future<void> handle(
       await reply(request, 200, data);
       return;
     }
-    if (request.uri.path != '/fixtures') {
+    final basketball = request.uri.path == '/basketball/fixtures';
+    if (request.uri.path != '/fixtures' && !basketball) {
       await reply(request, 404, {'error': 'not_found'});
       return;
     }
     if (!config.authorized(request.headers.value('authorization'))) {
       await reply(request, 401, {'error': 'client_auth'});
       return;
+    }
+    if (basketball) {
+      if (basketballCache == null) {
+        throw const ApiFailure('basketball_not_configured', 503);
+      }
+      cache = basketballCache;
     }
     final liveParam = request.uri.queryParameters['live'];
     if (liveParam != null && liveParam != '1')
@@ -688,8 +890,8 @@ Future<void> handle(
     await reply(request, 200, {
       'fixtures': normalize(rows, window),
       'fetchedAt': oldest!.toUtc().toIso8601String(),
-      'source': 'goal-api',
-      'cacheMinutes': live ? 5 : 15,
+      'source': basketball ? 'highlightly' : 'goal-api',
+      'cacheMinutes': basketball ? 120 : (live ? 5 : 15),
       'coverage': cache.providerCoverage,
       if (live)
         'liveFetchedAt': (liveTime ?? currentTime ?? oldest)
@@ -737,6 +939,16 @@ Future<void> main() async {
     return;
   }
   final cache = FixtureCache(FootballProvider(key).fetch);
+  final basketballKey =
+      Platform.environment['MATCHLY_HIGHLIGHTLY_KEY']?.trim() ?? '';
+  final basketballCache = basketballKey.isEmpty
+      ? null
+      : FixtureCache(
+          BasketballProvider(basketballKey).fetch,
+          interval: const Duration(seconds: 1),
+          dailyLimit: 90,
+          fixedCacheMinutes: 120,
+        );
   HttpServer server;
   try {
     server = await HttpServer.bind(config.address, config.port);
@@ -754,6 +966,8 @@ Future<void> main() async {
     stdout.writeln('Bu terminal acik kalsin. Durdurmak icin Ctrl+C.');
   }
   await for (final request in server) {
-    unawaited(handle(request, cache, config: config));
+    unawaited(
+      handle(request, cache, config: config, basketballCache: basketballCache),
+    );
   }
 }

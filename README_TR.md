@@ -1,3 +1,41 @@
+# MATCHLY sunucu 0.8.0 — Basketbol servisi
+
+Bu sürüm mevcut futbol servisini korur ve ayrı `/basketball/fixtures` servisi ekler.
+NBA (10996), EuroLeague (102904) ve Türkiye Basketbol Süper Ligi (89288) desteklenir.
+
+## Kurulum
+1. Render > matchly-api servisi > Environment bölümüne ekleyin:
+   `MATCHLY_HIGHLIGHTLY_KEY` = Highlightly panelindeki API anahtarınız.
+   Anahtarı GitHub'a, uygulama koduna veya sohbet ekranına yazmayın.
+2. Mevcut MATCHLY_GOAL_KEY ve MATCHLY_CLIENT_TOKEN değerlerini değiştirmeyin.
+3. ZIP içindeki dosyaları sunucu GitHub deposunun köküne yükleyin, aynı adlı dosyaları güncelleyin.
+4. Render dağıtımının Live olmasını bekleyin.
+5. /health yanıtındaki serverVersion: 0.8.0 olmalı.
+   Yetkilendirilmiş /health yanıtında basketballConfigured: true da görünür.
+
+Bu paket yalnızca sunucuyu günceller. Telefonda basketbol maçlarının görünmesi için
+Flutter uygulamasının bu yeni servisi kullanan sürümü ayrıca hazırlanıp yüklenmelidir.
+
+## Veri ve sınırlar
+- İstek: GET /basketball/fixtures?start=<UTC ISO tarih>&end=<UTC ISO tarih>
+- Yetkilendirme futbol servisiyle aynı Bearer MATCHLY_CLIENT_TOKEN başlığıdır.
+- Yanıtta sport=basketball, namespace içeren maç/takım/lig kimlikleri ve takım logoları vardır.
+- Q1–Q4, HT, BT ve OT canlı durumlarıdır; skor bilinmiyorsa null kalır.
+- Basketbol ücretsiz planında veriler 120 dakika ortak önbellekte tutulur; anlık skor vaadi yoktur.
+- Her sağlayıcı sayfası istek bütçesinden düşer. Sunucu süreci UTC gününde en fazla 90 basketbol isteği yapar.
+- Kota sayacı bellektedir; yeniden dağıtımda sıfırlanır. Sağlayıcı kotası bağımsız olarak geçerlidir.
+  Sağlayıcı 429 veya kalan kota 0 bildirirse süreç 24 saat basketbol isteği göndermez.
+- Eksik sayfalar, erişim kısıtları ve sağlayıcı hataları boş maç listesi gibi sunulmaz.
+- Basketbol anahtarı eksik olsa bile futbol servisi çalışır; basketbol servisi açık hata döndürür.
+
+## Doğrulama
+Dart analyze ve server_test.dart, cloud_test.dart, live_cache_test.dart,
+goal_provider_test.dart, basketball_test.dart çalıştırıldı.
+Gerçek anahtarla Render üzerinden erişim, dağıtımdan sonra ayrıca doğrulanmalıdır.
+
+---
+Önceki futbol kurulum notları:
+
 # MATCHLY – GOAL API / Dokuz Lig
 
 Bu sürüm Türkiye Süper Lig, Türkiye 1. Lig, Premier League, La Liga, Bundesliga, Serie A, Ligue 1, UEFA Champions League ve UEFA Europa League verisini GOAL API'den alır.
