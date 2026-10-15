@@ -1,3 +1,13 @@
+## 0.10.0 — Kadrolar
+
+Yeni yetkilendirmeli adres: `/fixtures/:id/lineups`. Sağlayıcı anahtarı sunucuda kalır.
+Kadrolar ve goller aynı günlük sağlayıcı kotasını kullanır. Kadrolar 5 dakika önbellekte tutulur.
+`lineups_test.dart` Docker derlemesinde çalışır. Mevcut ortam değişkenleri aynı kalır.
+
+# 0.9.1: Geçmiş maçlar
+Son 7 yerel gün için UTC ve saat dilimi payıyla geriye dönük pencere genişletildi.
+Tek istek yine yalnızca bir gün döndürür. Kota değişmedi.
+
 # Sunucu 0.9.0 — Gol olayları
 Yeni /fixtures/:id/events servisi mevcut istemci tokenı ile korunur.
 GOAL anahtarı sunucuda kalır. Futbol fikstürü ile ortak günlük 900 istek sınırı kullanılır.
