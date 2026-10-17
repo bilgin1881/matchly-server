@@ -1,3 +1,33 @@
+# Sunucu 0.12.0 — Puan durumu
+
+Dosyaları GitHub sunucu deposunun köküne yükleyin. Render Live sonrasında /health sürümü 0.12.0 olmalı.
+Mevcut ortam değişkenleri aynı; yeni anahtar gerekmez.
+GET /leagues/:id/standings mevcut CLIENT_TOKEN ile korunur.
+GOAL /v1/leagues/:id/standings yanıtı normalize edilir; gruplar/aşamalar/sezonlar ayrı kalır.
+Eksik sayılar null kalır, puan tablosu maç sonuçlarından üretilmez.
+15 dakika ortak önbellek kullanılır; aynı futbol sağlayıcısının günlük 900 istek bütçesine dahildir.
+standings_test.dart Docker derlemesinde çalışır. Flutter uygulaması 0.14.0+37 ile kullanın.
+Gerçek hesap kapsamı, Süper Lig erişimi ve sağlayıcı güncelliği dağıtım sonrası doğrulanmalı.
+
+Önceki notlar:
+
+# Sunucu 0.11.0 — Canlı yenileme
+
+ZIP içindeki dosyaları mevcut GitHub sunucu deposunun köküne yükleyin.
+Render Live sonrası /health serverVersion 0.11.0 olmalı. Ortam değişkenlerini koruyun.
+Sonra Flutter uygulamasını 0.12.0+33 sürümüne güncelleyin.
+
+Canlı futbol fikstürü ve gol olayları 30 saniye, kadrolar 60 saniye ortak önbellek kullanır.
+Yeni yetkilendirmeli /fixtures/:id/score adresi normalize edilmiş tek maç döndürür.
+Kadrolarda ?refresh=1 önbelleği ancak 30 saniye geçince yeniler.
+Eşzamanlı aynı maç istekleri birleştirilir. Ortak günlük 900 futbol isteği sınırı korunur.
+Kota ve sağlayıcı gecikmeleri geçerlidir; bu bir WebSocket/anlık veri garantisi değildir.
+Basketbol önbelleği 120 dakika, normal futbol listesi 15 dakika kalır.
+Docker derlemesinde refresh_test.dart dahil testler çalışır.
+
+---
+Önceki sürümlerin notları (yukarıdaki süreler günceldir):
+
 ## 0.10.0 — Kadrolar
 
 Yeni yetkilendirmeli adres: `/fixtures/:id/lineups`. Sağlayıcı anahtarı sunucuda kalır.
